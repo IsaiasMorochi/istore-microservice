@@ -10,9 +10,9 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.math.BigDecimal;
 
+@Data
 @Entity
 @Table(name="products")
-@Data
 public class ProductEntity implements Serializable {
 
 	@Serial

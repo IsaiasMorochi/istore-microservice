@@ -33,6 +33,7 @@ public class OrderEventsHandler {
 
     @EventHandler
     public void on(OrderApprovedEvent orderApprovedEvent) {
+
         OrderEntity orderEntity = this.ordersRepository.findByOrderId(orderApprovedEvent.getOrderId());
 
         if (orderEntity == null) {

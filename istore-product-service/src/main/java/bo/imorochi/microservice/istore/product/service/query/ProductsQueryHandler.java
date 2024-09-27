@@ -5,6 +5,7 @@ import bo.imorochi.microservice.istore.product.service.core.data.ProductReposito
 import bo.imorochi.microservice.istore.product.service.query.rest.ProductRestModel;
 import org.axonframework.queryhandling.QueryHandler;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -14,7 +15,8 @@ import java.util.List;
 public class ProductsQueryHandler {
 	
 	private final ProductRepository productRepository;
-	
+
+	@Autowired
 	public ProductsQueryHandler(ProductRepository productRepository) {
 		this.productRepository = productRepository;
 	}

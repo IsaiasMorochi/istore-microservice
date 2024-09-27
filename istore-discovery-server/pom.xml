@@ -11,7 +11,7 @@
     <groupId>bo.imorochi.microservice.istore</groupId>
     <artifactId>istore-discovery-server</artifactId>
     <version>1.0.0</version>
-    <name>ISTORE DISCOVERY SERVER</name>
+    <name>istore-discovery-server</name>
     <description>ISTORE DISCOVERY SERVER</description>
     <url/>
     <licenses>
@@ -35,7 +35,6 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
         </dependency>
-
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

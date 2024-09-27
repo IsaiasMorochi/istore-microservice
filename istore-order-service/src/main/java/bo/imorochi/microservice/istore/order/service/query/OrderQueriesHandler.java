@@ -19,8 +19,10 @@ public class OrderQueriesHandler {
 
     @QueryHandler
     public OrderSummary findOrder(FindOrderQuery findOrderQuery) {
+
         OrderEntity orderEntity = this.ordersRepository.findByOrderId(findOrderQuery.getOrderId());
         return new OrderSummary(orderEntity.getOrderId(), orderEntity.getOrderStatus(), "");
+
     }
 
 }

@@ -1,18 +1,23 @@
 package bo.imorochi.microservice.istore.product.service.command;
 
+import bo.imorochi.microservice.istore.core.commands.ReserveProductCommand;
+import bo.imorochi.microservice.istore.core.events.ProductReservedEvent;
 import bo.imorochi.microservice.istore.product.service.core.events.ProductCreatedEvent;
 import org.axonframework.commandhandling.CommandHandler;
+import org.axonframework.eventhandling.EventHandler;
 import org.axonframework.eventsourcing.EventSourcingHandler;
 import org.axonframework.modelling.command.AggregateIdentifier;
 import org.axonframework.modelling.command.AggregateLifecycle;
 import org.axonframework.spring.stereotype.Aggregate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 
 import java.math.BigDecimal;
 
 @Aggregate
 public class ProductAggregate {
-	
+
 	@AggregateIdentifier
 	private String productId;
 	private String title;
@@ -58,6 +63,29 @@ public class ProductAggregate {
 		this.title = productCreatedEvent.getTitle();
 		this.price = productCreatedEvent.getPrice();
 		this.quantity = productCreatedEvent.getQuantity();
+	}
+
+	@CommandHandler
+	public void handle(ReserveProductCommand reserveProductCommand) {
+
+		if(quantity < reserveProductCommand.getQuantity()) {
+			throw new IllegalArgumentException("Insufficient number of items in stock");
+		}
+
+		ProductReservedEvent productReservedEvent = ProductReservedEvent.builder()
+				.orderId(reserveProductCommand.getOrderId())
+				.productId(reserveProductCommand.getProductId())
+				.quantity(reserveProductCommand.getQuantity())
+				.userId(reserveProductCommand.getUserId())
+				.build();
+
+		AggregateLifecycle.apply(productReservedEvent);
+
+	}
+
+	@EventSourcingHandler
+	public void on(ProductReservedEvent productReservedEvent) {
+		this.quantity -= productReservedEvent.getQuantity();
 	}
 
 }
