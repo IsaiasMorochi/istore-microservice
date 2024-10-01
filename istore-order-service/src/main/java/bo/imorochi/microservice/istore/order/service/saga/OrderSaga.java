@@ -1,8 +1,10 @@
 package bo.imorochi.microservice.istore.order.service.saga;
 
+import bo.imorochi.microservice.istore.core.commands.CancelProductReservationCommand;
 import bo.imorochi.microservice.istore.core.commands.ProcessPaymentCommand;
 import bo.imorochi.microservice.istore.core.commands.ReserveProductCommand;
 import bo.imorochi.microservice.istore.core.events.PaymentProcessedEvent;
+import bo.imorochi.microservice.istore.core.events.ProductReservationCancelledEvent;
 import bo.imorochi.microservice.istore.core.events.ProductReservedEvent;
 import bo.imorochi.microservice.istore.core.model.User;
 import bo.imorochi.microservice.istore.core.query.FetchUserPaymentDetailsQuery;
@@ -10,6 +12,7 @@ import bo.imorochi.microservice.istore.order.service.command.commands.ApproveOrd
 import bo.imorochi.microservice.istore.order.service.command.commands.RejectOrderCommand;
 import bo.imorochi.microservice.istore.order.service.core.events.OrderApprovedEvent;
 import bo.imorochi.microservice.istore.order.service.core.events.OrderCreatedEvent;
+import bo.imorochi.microservice.istore.order.service.core.events.OrderRejectedEvent;
 import bo.imorochi.microservice.istore.order.service.core.model.OrderSummary;
 import bo.imorochi.microservice.istore.order.service.query.FindOrderQuery;
 import org.axonframework.commandhandling.CommandCallback;
@@ -47,6 +50,9 @@ public class OrderSaga {
 
     @Autowired
     private transient CommandGateway commandGateway;
+
+    @Autowired
+    private transient QueryUpdateEmitter queryUpdateEmitter;
 
     @StartSaga
     @SagaEventHandler(associationProperty = "orderId")
@@ -95,11 +101,13 @@ public class OrderSaga {
             // Start compensating transaction
             LOGGER.warn("FetchUserPaymentDetailsQuery Start compensating transaction for userId: {}",
                     productReservedEvent.getUserId());
+            cancelProductReservation(productReservedEvent,ex.getMessage());
             return;
         }
 
         if (userPaymentDetails == null) {
             // Start compensating transaction
+            cancelProductReservation(productReservedEvent,"Could not fetch user payment details");
             return;
         }
 
@@ -123,12 +131,14 @@ public class OrderSaga {
             // Start compensating transaction
             LOGGER.warn("ProcessPaymentCommand Start compensating transaction for orderId: {}",
                     productReservedEvent.getOrderId());
+            cancelProductReservation(productReservedEvent,ex.getMessage());
             return;
         }
 
         if(result == null) {
             // Start compensating transaction
             LOGGER.warn("The ProcessPaymentCommand resulted in NULL. Initiating a compensating transaction");
+            cancelProductReservation(productReservedEvent, "Could not proccess user payment with provided payment details");
         }
 
     }
@@ -149,6 +159,44 @@ public class OrderSaga {
         LOGGER.info("Order is approved. Order Saga is complete for orderId: {}",
                 orderApprovedEvent.getOrderId());
         //SagaLifecycle.end(); //una vez este metodo se ejecuta ya no se podra gestionar nuevos eventos para el saga
+
+    }
+
+    @SagaEventHandler(associationProperty="orderId")
+    public void handle(ProductReservationCancelledEvent productReservationCancelledEvent) {
+        // Create and send a RejectOrderCommand
+        RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(productReservationCancelledEvent.getOrderId(),
+                productReservationCancelledEvent.getReason());
+
+        this.commandGateway.send(rejectOrderCommand);
+    }
+
+    @EndSaga
+    @SagaEventHandler(associationProperty="orderId")
+    public void handle(OrderRejectedEvent orderRejectedEvent) {
+        LOGGER.info("Successfully rejected order with id {}", orderRejectedEvent.getOrderId());
+
+        this.queryUpdateEmitter.emit(FindOrderQuery.class, query -> true,
+                new OrderSummary(orderRejectedEvent.getOrderId(),
+                        orderRejectedEvent.getOrderStatus(),
+                        orderRejectedEvent.getReason()));
+    }
+
+
+
+    // Method Aux
+    private void cancelProductReservation(ProductReservedEvent productReservedEvent, String reason) {
+
+        CancelProductReservationCommand publishProductReservationCommand =
+                CancelProductReservationCommand.builder()
+                        .orderId(productReservedEvent.getOrderId())
+                        .productId(productReservedEvent.getProductId())
+                        .quantity(productReservedEvent.getQuantity())
+                        .userId(productReservedEvent.getUserId())
+                        .reason(reason)
+                        .build();
+
+        this.commandGateway.send(publishProductReservationCommand);
 
     }
 

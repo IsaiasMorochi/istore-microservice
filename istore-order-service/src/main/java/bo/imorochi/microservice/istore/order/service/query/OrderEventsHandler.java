@@ -50,8 +50,11 @@ public class OrderEventsHandler {
 
     @EventHandler
     public void on(OrderRejectedEvent orderRejectedEvent) {
+
         OrderEntity orderEntity = this.ordersRepository.findByOrderId(orderRejectedEvent.getOrderId());
+
         orderEntity.setOrderStatus(orderRejectedEvent.getOrderStatus());
+
         this.ordersRepository.save(orderEntity);
     }
 

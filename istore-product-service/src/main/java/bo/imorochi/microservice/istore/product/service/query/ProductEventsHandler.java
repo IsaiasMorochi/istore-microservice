@@ -1,5 +1,6 @@
 package bo.imorochi.microservice.istore.product.service.query;
 
+import bo.imorochi.microservice.istore.core.events.ProductReservationCancelledEvent;
 import bo.imorochi.microservice.istore.core.events.ProductReservedEvent;
 import bo.imorochi.microservice.istore.product.service.core.data.ProductEntity;
 import bo.imorochi.microservice.istore.product.service.core.data.ProductRepository;
@@ -72,6 +73,26 @@ public class ProductEventsHandler {
 
         LOGGER.info("ProductReservedEvent is called for productId: {} and orderId: {}",
                 productReservedEvent.getProductId(), productReservedEvent.getOrderId());
+
+    }
+
+    @EventHandler
+    public void on(ProductReservationCancelledEvent productReservationCancelledEvent) {
+
+        ProductEntity currentlyStoredProduct = this.productsRepository
+                .findByProductId(productReservationCancelledEvent.getProductId());
+
+        LOGGER.debug("ProductReservationCancelledEvent: Current product quantity {}",
+                currentlyStoredProduct.getQuantity());
+
+        int newQuantity = currentlyStoredProduct.getQuantity() + productReservationCancelledEvent.getQuantity();
+        currentlyStoredProduct.setQuantity(newQuantity);
+
+        this.productsRepository.save(currentlyStoredProduct);
+
+        LOGGER.debug("ProductReservationCancelledEvent: New product quantity {}",
+                currentlyStoredProduct.getQuantity());
+
     }
 
 }
