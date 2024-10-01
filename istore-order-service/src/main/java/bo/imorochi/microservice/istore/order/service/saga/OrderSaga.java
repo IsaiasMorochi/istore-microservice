@@ -20,6 +20,7 @@ import org.axonframework.deadline.DeadlineManager;
 import org.axonframework.messaging.responsetypes.ResponseTypes;
 import org.axonframework.modelling.saga.EndSaga;
 import org.axonframework.modelling.saga.SagaEventHandler;
+import org.axonframework.modelling.saga.SagaLifecycle;
 import org.axonframework.modelling.saga.StartSaga;
 import org.axonframework.queryhandling.QueryGateway;
 import org.axonframework.queryhandling.QueryUpdateEmitter;
@@ -142,5 +143,13 @@ public class OrderSaga {
         this.commandGateway.send(approveOrderCommand);
     }
 
+    @EndSaga
+    @SagaEventHandler(associationProperty="orderId")
+    public void handle(OrderApprovedEvent orderApprovedEvent) {
+        LOGGER.info("Order is approved. Order Saga is complete for orderId: {}",
+                orderApprovedEvent.getOrderId());
+        //SagaLifecycle.end(); //una vez este metodo se ejecuta ya no se podra gestionar nuevos eventos para el saga
+
+    }
 
 }
