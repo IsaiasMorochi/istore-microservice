@@ -2,6 +2,8 @@ package bo.imorochi.microservice.istore.order.service.saga;
 
 import bo.imorochi.microservice.istore.core.commands.ReserveProductCommand;
 import bo.imorochi.microservice.istore.core.events.ProductReservedEvent;
+import bo.imorochi.microservice.istore.core.model.User;
+import bo.imorochi.microservice.istore.core.query.FetchUserPaymentDetailsQuery;
 import bo.imorochi.microservice.istore.order.service.command.commands.RejectOrderCommand;
 import bo.imorochi.microservice.istore.order.service.core.events.OrderApprovedEvent;
 import bo.imorochi.microservice.istore.order.service.core.events.OrderCreatedEvent;
@@ -60,27 +62,11 @@ public class OrderSaga {
 
             if (commandResultMessage.isExceptional()) {
                 // Start a compensating transaction
-
+                LOGGER.warn("RejectOrderCommand handled for orderId: {} and productId: {}"
+                        , reserveProductCommand.getOrderId(), reserveProductCommand.getProductId());
             }
 
         });
-
-//        commandGateway.send(reserveProductCommand, new CommandCallback<ReserveProductCommand, Object>() {
-//
-//            @Override
-//            public void onResult(CommandMessage<? extends ReserveProductCommand> commandMessage,
-//                                 CommandResultMessage<? extends Object> commandResultMessage) {
-//                if(commandResultMessage.isExceptional()) {
-//                    // Start a compensating transaction
-////                    RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(orderCreatedEvent.getOrderId(),
-////                            commandResultMessage.exceptionResult().getMessage());
-////
-////                    commandGateway.send(rejectOrderCommand);
-//                }
-//
-//            }
-//
-//        });
 
     }
 
@@ -90,6 +76,31 @@ public class OrderSaga {
         // Process user payment
         LOGGER.info("ProductReservedEvent is called for productId: {} and orderId: {}",
                 productReservedEvent.getProductId(), productReservedEvent.getOrderId());
+
+        FetchUserPaymentDetailsQuery fetchUserPaymentDetailsQuery =
+                new FetchUserPaymentDetailsQuery(productReservedEvent.getUserId());
+
+        User userPaymentDetails = null;
+
+        try {
+            userPaymentDetails = this.queryGateway.query(fetchUserPaymentDetailsQuery,
+                    ResponseTypes.instanceOf(User.class)).join();
+        } catch (Exception ex) {
+            LOGGER.error(ex.getMessage());
+
+            // Start compensating transaction
+            LOGGER.info("FetchUserPaymentDetailsQuery Start compensating transaction for userId: {}",
+                    productReservedEvent.getUserId());
+            return;
+        }
+
+        if (userPaymentDetails == null) {
+            // Start compensating transaction
+            return;
+        }
+
+        LOGGER.info("Successfully fetched user payment details for user {}",
+                userPaymentDetails.getFirstName());
 
     }
 
@@ -103,8 +114,6 @@ public class OrderSaga {
 //                        orderApprovedEvent.getOrderStatus(),
 //                        ""));
 //    }
-
-
 
 
 }

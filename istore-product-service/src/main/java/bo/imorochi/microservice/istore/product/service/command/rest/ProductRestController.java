@@ -41,14 +41,14 @@ public class ProductRestController {
 
         String returnValue;
 
+        returnValue = commandGateway.sendAndWait(createProductCommand);
+
         //Command Gateway asimilar como un API para enviar comandos al Command Bus
 //		try {
 //			returnValue = commandGateway.sendAndWait(createProductCommand);
 //		} catch (Exception ex) {
 //			returnValue = ex.getLocalizedMessage();
 //		}
-
-        returnValue = commandGateway.sendAndWait(createProductCommand);
 
         return returnValue;
 
