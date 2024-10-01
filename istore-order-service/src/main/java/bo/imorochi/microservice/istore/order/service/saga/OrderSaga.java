@@ -1,9 +1,12 @@
 package bo.imorochi.microservice.istore.order.service.saga;
 
+import bo.imorochi.microservice.istore.core.commands.ProcessPaymentCommand;
 import bo.imorochi.microservice.istore.core.commands.ReserveProductCommand;
+import bo.imorochi.microservice.istore.core.events.PaymentProcessedEvent;
 import bo.imorochi.microservice.istore.core.events.ProductReservedEvent;
 import bo.imorochi.microservice.istore.core.model.User;
 import bo.imorochi.microservice.istore.core.query.FetchUserPaymentDetailsQuery;
+import bo.imorochi.microservice.istore.order.service.command.commands.ApproveOrderCommand;
 import bo.imorochi.microservice.istore.order.service.command.commands.RejectOrderCommand;
 import bo.imorochi.microservice.istore.order.service.core.events.OrderApprovedEvent;
 import bo.imorochi.microservice.istore.order.service.core.events.OrderCreatedEvent;
@@ -89,7 +92,7 @@ public class OrderSaga {
             LOGGER.error(ex.getMessage());
 
             // Start compensating transaction
-            LOGGER.info("FetchUserPaymentDetailsQuery Start compensating transaction for userId: {}",
+            LOGGER.warn("FetchUserPaymentDetailsQuery Start compensating transaction for userId: {}",
                     productReservedEvent.getUserId());
             return;
         }
@@ -102,18 +105,42 @@ public class OrderSaga {
         LOGGER.info("Successfully fetched user payment details for user {}",
                 userPaymentDetails.getFirstName());
 
+//        scheduleId =  deadlineManager.schedule(Duration.of(120, ChronoUnit.SECONDS),
+//                PAYMENT_PROCESSING_TIMEOUT_DEADLINE, productReservedEvent);
+
+        ProcessPaymentCommand proccessPaymentCommand = ProcessPaymentCommand.builder()
+                .orderId(productReservedEvent.getOrderId())
+                .paymentDetails(userPaymentDetails.getPaymentDetails())
+                .paymentId(UUID.randomUUID().toString())
+                .build();
+
+        String result = null;
+        try {
+            result = commandGateway.sendAndWait(proccessPaymentCommand);
+        } catch(Exception ex) {
+            LOGGER.error(ex.getMessage());
+            // Start compensating transaction
+            LOGGER.warn("ProcessPaymentCommand Start compensating transaction for orderId: {}",
+                    productReservedEvent.getOrderId());
+            return;
+        }
+
+        if(result == null) {
+            // Start compensating transaction
+            LOGGER.warn("The ProcessPaymentCommand resulted in NULL. Initiating a compensating transaction");
+        }
+
     }
 
-//    @EndSaga
-//    @SagaEventHandler(associationProperty="orderId")
-//    public void handle(OrderApprovedEvent orderApprovedEvent) {
-//        LOGGER.info("Order is approved. Order Saga is complete for orderId: " + orderApprovedEvent.getOrderId());
-//        //SagaLifecycle.end();
-//        queryUpdateEmitter.emit(FindOrderQuery.class, query -> true,
-//                new OrderSummary(orderApprovedEvent.getOrderId(),
-//                        orderApprovedEvent.getOrderStatus(),
-//                        ""));
-//    }
+    @SagaEventHandler(associationProperty="orderId")
+    public void handle(PaymentProcessedEvent paymentProcessedEvent) {
+
+        // Send an ApproveOrderCommand
+        ApproveOrderCommand approveOrderCommand =
+                new ApproveOrderCommand(paymentProcessedEvent.getOrderId());
+
+        this.commandGateway.send(approveOrderCommand);
+    }
 
 
 }
