@@ -83,6 +83,10 @@ public class OrderSaga {
                 // Start a compensating transaction
                 LOGGER.warn("RejectOrderCommand handled for orderId: {} and productId: {}"
                         , reserveProductCommand.getOrderId(), reserveProductCommand.getProductId());
+                RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(orderCreatedEvent.getOrderId(),
+                        commandResultMessage.exceptionResult().getMessage());
+
+                this.commandGateway.send(rejectOrderCommand);
             }
 
         });
@@ -173,7 +177,17 @@ public class OrderSaga {
     public void handle(OrderApprovedEvent orderApprovedEvent) {
         LOGGER.info("Order is approved. Order Saga is complete for orderId: {}",
                 orderApprovedEvent.getOrderId());
-        //SagaLifecycle.end(); //una vez este metodo se ejecuta ya no se podra gestionar nuevos eventos para el saga
+
+        //una vez este metodo se ejecuta ya no se podra gestionar nuevos eventos para el saga
+        //SagaLifecycle.end();
+
+        this.queryUpdateEmitter.emit(
+                FindOrderQuery.class,
+                query -> true,
+                new OrderSummary(orderApprovedEvent.getOrderId(),
+                        orderApprovedEvent.getOrderStatus(),
+                        "")
+        );
 
     }
 
@@ -191,10 +205,16 @@ public class OrderSaga {
     public void handle(OrderRejectedEvent orderRejectedEvent) {
         LOGGER.info("Successfully rejected order with id {}", orderRejectedEvent.getOrderId());
 
-        this.queryUpdateEmitter.emit(FindOrderQuery.class, query -> true,
+        //Encargado de emitir a las consultas con suscripcion sobre actualizaciones
+        this.queryUpdateEmitter.emit(
+                FindOrderQuery.class,
+                query -> true,
                 new OrderSummary(orderRejectedEvent.getOrderId(),
                         orderRejectedEvent.getOrderStatus(),
-                        orderRejectedEvent.getReason()));
+                        orderRejectedEvent.getReason()
+                )
+        );
+
     }
 
 
@@ -226,6 +246,7 @@ public class OrderSaga {
 
     /**
      * Se ejecuta cuando se supera el umblar de espera
+     *
      * @param productReservedEvent Evento que emite el deadline
      */
     @DeadlineHandler(deadlineName = PAYMENT_PROCESSING_TIMEOUT_DEADLINE)

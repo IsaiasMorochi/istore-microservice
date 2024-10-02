@@ -47,21 +47,13 @@ public class OrdersCommandController {
                 .orderStatus(OrderStatus.CREATED)
                 .build();
 
-//        try (SubscriptionQueryResult<OrderSummary, OrderSummary> queryResult = this.queryGateway.subscriptionQuery(
-//                new FindOrderQuery(orderId), ResponseTypes.instanceOf(OrderSummary.class), ResponseTypes.instanceOf(OrderSummary.class))) {
-//            commandGateway.sendAndWait(createOrderCommand);
-//            return queryResult.updates().blockFirst();
-//        }
+        // Subscription Query
+        try (SubscriptionQueryResult<OrderSummary, OrderSummary> queryResult = this.queryGateway.subscriptionQuery(
+                new FindOrderQuery(orderId), ResponseTypes.instanceOf(OrderSummary.class), ResponseTypes.instanceOf(OrderSummary.class))) {
 
-        SubscriptionQueryResult<OrderSummary, OrderSummary> queryResult = queryGateway.subscriptionQuery(
-                new FindOrderQuery(orderId), ResponseTypes.instanceOf(OrderSummary.class),
-                ResponseTypes.instanceOf(OrderSummary.class));
-
-        try {
             commandGateway.sendAndWait(createOrderCommand);
             return queryResult.updates().blockFirst();
-        } finally {
-            queryResult.close();
+
         }
 
     }
