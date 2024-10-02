@@ -20,6 +20,7 @@ import org.axonframework.commandhandling.CommandMessage;
 import org.axonframework.commandhandling.CommandResultMessage;
 import org.axonframework.commandhandling.gateway.CommandGateway;
 import org.axonframework.deadline.DeadlineManager;
+import org.axonframework.deadline.annotation.DeadlineHandler;
 import org.axonframework.messaging.responsetypes.ResponseTypes;
 import org.axonframework.modelling.saga.EndSaga;
 import org.axonframework.modelling.saga.SagaEventHandler;
@@ -52,7 +53,15 @@ public class OrderSaga {
     private transient CommandGateway commandGateway;
 
     @Autowired
+    private transient DeadlineManager deadlineManager;
+
+    @Autowired
     private transient QueryUpdateEmitter queryUpdateEmitter;
+
+    private String scheduleId;
+
+    private final String PAYMENT_PROCESSING_TIMEOUT_DEADLINE = "payment-processing-deadline";
+
 
     @StartSaga
     @SagaEventHandler(associationProperty = "orderId")
@@ -101,21 +110,25 @@ public class OrderSaga {
             // Start compensating transaction
             LOGGER.warn("FetchUserPaymentDetailsQuery Start compensating transaction for userId: {}",
                     productReservedEvent.getUserId());
-            cancelProductReservation(productReservedEvent,ex.getMessage());
+            cancelProductReservation(productReservedEvent, ex.getMessage());
             return;
         }
 
         if (userPaymentDetails == null) {
             // Start compensating transaction
-            cancelProductReservation(productReservedEvent,"Could not fetch user payment details");
+            cancelProductReservation(productReservedEvent, "Could not fetch user payment details");
             return;
         }
 
         LOGGER.info("Successfully fetched user payment details for user {}",
                 userPaymentDetails.getFirstName());
 
-//        scheduleId =  deadlineManager.schedule(Duration.of(120, ChronoUnit.SECONDS),
-//                PAYMENT_PROCESSING_TIMEOUT_DEADLINE, productReservedEvent);
+        // si el procesamiento de pago no se completa en 120s esperamos que se active un evento diferente
+        scheduleId = deadlineManager.schedule(Duration.of(120, ChronoUnit.SECONDS),
+                PAYMENT_PROCESSING_TIMEOUT_DEADLINE, productReservedEvent);
+
+        // TODO: agregado intencionalmente para probar el deadline, evita que se procese el pago
+        //if (true) return;
 
         ProcessPaymentCommand proccessPaymentCommand = ProcessPaymentCommand.builder()
                 .orderId(productReservedEvent.getOrderId())
@@ -126,16 +139,16 @@ public class OrderSaga {
         String result = null;
         try {
             result = commandGateway.sendAndWait(proccessPaymentCommand);
-        } catch(Exception ex) {
+        } catch (Exception ex) {
             LOGGER.error(ex.getMessage());
             // Start compensating transaction
             LOGGER.warn("ProcessPaymentCommand Start compensating transaction for orderId: {}",
                     productReservedEvent.getOrderId());
-            cancelProductReservation(productReservedEvent,ex.getMessage());
+            cancelProductReservation(productReservedEvent, ex.getMessage());
             return;
         }
 
-        if(result == null) {
+        if (result == null) {
             // Start compensating transaction
             LOGGER.warn("The ProcessPaymentCommand resulted in NULL. Initiating a compensating transaction");
             cancelProductReservation(productReservedEvent, "Could not proccess user payment with provided payment details");
@@ -143,8 +156,10 @@ public class OrderSaga {
 
     }
 
-    @SagaEventHandler(associationProperty="orderId")
+    @SagaEventHandler(associationProperty = "orderId")
     public void handle(PaymentProcessedEvent paymentProcessedEvent) {
+
+        cancelDeadline();
 
         // Send an ApproveOrderCommand
         ApproveOrderCommand approveOrderCommand =
@@ -154,7 +169,7 @@ public class OrderSaga {
     }
 
     @EndSaga
-    @SagaEventHandler(associationProperty="orderId")
+    @SagaEventHandler(associationProperty = "orderId")
     public void handle(OrderApprovedEvent orderApprovedEvent) {
         LOGGER.info("Order is approved. Order Saga is complete for orderId: {}",
                 orderApprovedEvent.getOrderId());
@@ -162,7 +177,7 @@ public class OrderSaga {
 
     }
 
-    @SagaEventHandler(associationProperty="orderId")
+    @SagaEventHandler(associationProperty = "orderId")
     public void handle(ProductReservationCancelledEvent productReservationCancelledEvent) {
         // Create and send a RejectOrderCommand
         RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(productReservationCancelledEvent.getOrderId(),
@@ -172,7 +187,7 @@ public class OrderSaga {
     }
 
     @EndSaga
-    @SagaEventHandler(associationProperty="orderId")
+    @SagaEventHandler(associationProperty = "orderId")
     public void handle(OrderRejectedEvent orderRejectedEvent) {
         LOGGER.info("Successfully rejected order with id {}", orderRejectedEvent.getOrderId());
 
@@ -181,7 +196,6 @@ public class OrderSaga {
                         orderRejectedEvent.getOrderStatus(),
                         orderRejectedEvent.getReason()));
     }
-
 
 
     // Method Aux
@@ -198,6 +212,26 @@ public class OrderSaga {
 
         this.commandGateway.send(publishProductReservationCommand);
 
+    }
+
+    /**
+     * Cancela el deadline si el pago es procesado correctamente y no se vence el plazo programado
+     */
+    private void cancelDeadline() {
+        if (scheduleId != null) {
+            deadlineManager.cancelSchedule(PAYMENT_PROCESSING_TIMEOUT_DEADLINE, scheduleId);
+            scheduleId = null;
+        }
+    }
+
+    /**
+     * Se ejecuta cuando se supera el umblar de espera
+     * @param productReservedEvent Evento que emite el deadline
+     */
+    @DeadlineHandler(deadlineName = PAYMENT_PROCESSING_TIMEOUT_DEADLINE)
+    public void handlePaymentDeadline(ProductReservedEvent productReservedEvent) {
+        LOGGER.info("Payment processing deadline took place. Sending a compensating command to cancel the product reservation");
+        cancelProductReservation(productReservedEvent, "Payment timeout");
     }
 
 }
