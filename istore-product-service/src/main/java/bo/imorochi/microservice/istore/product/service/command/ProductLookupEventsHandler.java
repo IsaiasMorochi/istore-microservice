@@ -5,6 +5,7 @@ import bo.imorochi.microservice.istore.product.service.core.data.ProductLookupRe
 import bo.imorochi.microservice.istore.product.service.core.events.ProductCreatedEvent;
 import org.axonframework.config.ProcessingGroup;
 import org.axonframework.eventhandling.EventHandler;
+import org.axonframework.eventhandling.ResetHandler;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -25,6 +26,11 @@ public class ProductLookupEventsHandler {
 		
 		this.productLookupRepository.save(productLookupEntity);
 		
+	}
+
+	@ResetHandler
+	public void reset() {
+		this.productLookupRepository.deleteAll();
 	}
 	
 }

@@ -7,6 +7,7 @@ import bo.imorochi.microservice.istore.product.service.core.data.ProductReposito
 import bo.imorochi.microservice.istore.product.service.core.events.ProductCreatedEvent;
 import org.axonframework.config.ProcessingGroup;
 import org.axonframework.eventhandling.EventHandler;
+import org.axonframework.eventhandling.ResetHandler;
 import org.axonframework.messaging.interceptors.ExceptionHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,6 +94,11 @@ public class ProductEventsHandler {
         LOGGER.debug("ProductReservationCancelledEvent: New product quantity {}",
                 currentlyStoredProduct.getQuantity());
 
+    }
+
+    @ResetHandler
+    public void reset() {
+        this.productsRepository.deleteAll();
     }
 
 }
